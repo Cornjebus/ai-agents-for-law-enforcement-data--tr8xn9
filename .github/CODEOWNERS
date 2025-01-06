@@ -1,0 +1,42 @@
+* @project-leads @security-team
+
+# Backend services ownership
+src/backend/* @backend-team @security-team
+
+# AI services and models ownership
+src/backend/ai/* @ai-team @backend-team @security-team
+src/backend/ai/models/* @ai-team @data-science-team
+
+# Frontend application ownership
+src/web/* @frontend-team @security-team
+
+# Infrastructure and deployment ownership
+infrastructure/* @devops-team @security-team
+
+# CI/CD workflow configurations
+.github/workflows/* @devops-team @security-team
+
+# Security implementations
+src/backend/security/* @security-team @backend-team
+
+# Analytics services ownership
+src/backend/services/analytics/* @analytics-team @data-science-team @backend-team
+
+# Voice processing services
+src/backend/services/voice/* @ai-team @backend-team @security-team
+
+# External integrations
+src/backend/integration/* @integration-team @backend-team @security-team
+
+# Test suites ownership
+src/backend/tests/* @qa-team @backend-team
+src/web/tests/* @qa-team @frontend-team
+
+# Documentation ownership
+*.md @docs-team
+
+# Configuration files
+config/* @devops-team @security-team
+
+# Database migrations
+src/backend/db/migrations/* @backend-team @data-science-team
