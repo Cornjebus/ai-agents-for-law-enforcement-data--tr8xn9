@@ -1,0 +1,44 @@
+# Version: 1.0
+# Last Updated: 2023
+
+# Default crawler rules
+User-agent: *
+Allow: /
+Allow: /login
+Allow: /analytics
+Allow: /campaigns
+Allow: /content
+Allow: /dashboard
+Allow: /leads
+
+# Protect sensitive routes and interfaces
+Disallow: /api/
+Disallow: /settings/
+Disallow: /voice/
+Disallow: /_next/
+Disallow: /*.json$
+Disallow: /*/edit
+Disallow: /*/create
+Disallow: /internal/
+Disallow: /admin/
+Disallow: /debug/
+
+# Block AI model crawlers
+User-agent: GPTBot
+Disallow: /
+
+User-agent: ChatGPT-User
+Disallow: /
+
+User-agent: Claude-Web
+Disallow: /
+
+User-agent: anthropic-ai
+Disallow: /
+
+# Crawler rate control
+Crawl-delay: 10
+
+# Site verification and sitemap
+Host: https://example.com
+Sitemap: https://example.com/sitemap.xml
