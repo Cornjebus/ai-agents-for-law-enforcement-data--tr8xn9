@@ -1,0 +1,54 @@
+# Kubernetes service configuration for Next.js web frontend
+# Version: v1.25+
+# Purpose: Expose and load balance web frontend with high availability
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-service
+  namespace: revenue-platform
+  labels:
+    app: web
+    component: frontend
+    managed-by: kustomize
+    tier: frontend
+    environment: ${ENV}
+    version: ${VERSION}
+  annotations:
+    description: "Next.js web frontend service"
+    # Prometheus monitoring configuration
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "3000"
+    prometheus.io/path: "/metrics"
+    # AWS Load Balancer configuration for high availability
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+    service.beta.kubernetes.io/aws-load-balancer-connection-draining-enabled: "true"
+    service.beta.kubernetes.io/aws-load-balancer-connection-draining-timeout: "60"
+
+spec:
+  # Internal cluster access only for security
+  type: ClusterIP
+  
+  # Port configuration for web traffic
+  ports:
+    - name: http
+      port: 80
+      targetPort: 3000
+      protocol: TCP
+      appProtocol: http
+
+  # Pod selector for service targeting
+  selector:
+    app: web
+    component: frontend
+    tier: frontend
+
+  # Load balancing configuration
+  sessionAffinity: None
+  publishNotReadyAddresses: false
+  internalTrafficPolicy: Cluster
+  
+  # IP configuration
+  ipFamilyPolicy: SingleStack
+  ipFamilies:
+    - IPv4
