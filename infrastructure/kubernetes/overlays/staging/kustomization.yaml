@@ -1,0 +1,130 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Set staging namespace
+namespace: revenue-platform-staging
+
+# Add staging prefix to all resources
+namePrefix: staging-
+
+# Common labels for all resources
+commonLabels:
+  environment: staging
+  managed-by: kustomize
+  app.kubernetes.io/environment: staging
+  app.kubernetes.io/managed-by: kustomize
+
+# Common annotations for all resources
+commonAnnotations:
+  environment: staging
+  contact: devops@company.com
+  deployment.kubernetes.io/strategy: blue-green
+  monitoring.cloud.google.com/scrape: "true"
+
+# Base resources to customize
+resources:
+- ../../base/namespace.yaml
+- ../../base/api-deployment.yaml
+- ../../base/web-deployment.yaml
+- ../../base/worker-deployment.yaml
+
+# Patches to customize base resources for staging
+patches:
+# API deployment customization
+- target:
+    kind: Deployment
+    name: api-deployment
+  patch: |
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: api-deployment
+    spec:
+      replicas: 2
+      template:
+        spec:
+          containers:
+          - name: api
+            resources:
+              requests:
+                cpu: 500m
+                memory: 1Gi
+              limits:
+                cpu: "1"
+                memory: 2Gi
+            env:
+            - name: NODE_ENV
+              value: staging
+            - name: LOG_LEVEL
+              value: debug
+
+# Web deployment customization
+- target:
+    kind: Deployment
+    name: web-deployment
+  patch: |
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: web-deployment
+    spec:
+      replicas: 2
+      template:
+        spec:
+          containers:
+          - name: web
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+              limits:
+                cpu: 300m
+                memory: 512Mi
+            env:
+            - name: NODE_ENV
+              value: staging
+            - name: ENABLE_DEBUG
+              value: "true"
+
+# Worker deployment customization
+- target:
+    kind: Deployment
+    name: revenue-platform-worker
+  patch: |
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: revenue-platform-worker
+    spec:
+      replicas: 2
+      template:
+        spec:
+          containers:
+          - name: worker
+            resources:
+              requests:
+                cpu: 500m
+                memory: 1Gi
+              limits:
+                cpu: "1"
+                memory: 2Gi
+            env:
+            - name: NODE_ENV
+              value: staging
+            - name: WORKER_DEBUG
+              value: "true"
+
+# ConfigMap generation for staging environment
+configMapGenerator:
+- name: staging-config
+  literals:
+  - NODE_ENV=staging
+  - LOG_LEVEL=debug
+  - ENABLE_MONITORING=true
+  - ENABLE_DEBUG=true
+  - API_URL=https://api.staging.revenue-platform.com
+  - WEB_URL=https://staging.revenue-platform.com
+  - METRICS_ENDPOINT=/metrics
+  - HEALTH_CHECK_PATH=/health
+  - MAX_REPLICAS=4
+  - MIN_REPLICAS=2
