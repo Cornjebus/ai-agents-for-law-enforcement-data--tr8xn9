@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg 
+    xmlns="http://www.w3.org/2000/svg" 
+    xmlns:xlink="http://www.w3.org/1999/xlink"
+    viewBox="0 0 240 60"
+    width="auto"
+    height="auto"
+    preserveAspectRatio="xMidYMid meet"
+    role="img"
+    aria-label="Autonomous Revenue Generation Platform Logo"
+    focusable="false"
+    lang="en"
+>
+    <!-- Metadata -->
+    <title>Company Logo</title>
+    <desc>Official logo of the Autonomous Revenue Generation Platform</desc>
+    
+    <!-- Definitions for reusable elements -->
+    <defs>
+        <!-- Primary gradient -->
+        <linearGradient id="primary-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:#2563EB;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#3B82F6;stop-opacity:1" />
+        </linearGradient>
+        
+        <!-- Secondary gradient -->
+        <linearGradient id="secondary-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#3B82F6;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#2563EB;stop-opacity:0.8" />
+        </linearGradient>
+    </defs>
+
+    <!-- Main Logo Group -->
+    <g id="logo-main">
+        <!-- Abstract "A" shape representing Autonomous -->
+        <path 
+            d="M40 50L20 10h40L40 50z" 
+            fill="url(#primary-gradient)"
+            stroke="none"
+        />
+        
+        <!-- Revenue curve symbol -->
+        <path 
+            d="M70 40c20-30 40-30 60 0" 
+            fill="none"
+            stroke="url(#secondary-gradient)"
+            stroke-width="8"
+            stroke-linecap="round"
+        />
+        
+        <!-- Generation spark symbol -->
+        <path 
+            d="M140 30l10-20 10 20-10 20z" 
+            fill="url(#primary-gradient)"
+            stroke="none"
+        />
+    </g>
+
+    <!-- Platform text (stylized) -->
+    <g id="logo-text" fill="#2563EB">
+        <path 
+            d="M170 40h60v-5h-60z" 
+            opacity="0.9"
+        />
+        <path 
+            d="M170 30h40v-5h-40z" 
+            opacity="0.7"
+        />
+    </g>
+
+    <!-- Responsive behavior styles -->
+    <style>
+        @media (max-width: 320px) {
+            #logo-main { transform: scale(0.67); }
+        }
+        @media (min-width: 321px) and (max-width: 768px) {
+            #logo-main { transform: scale(0.83); }
+        }
+        @media (min-width: 769px) {
+            #logo-main { transform: scale(1); }
+        }
+    </style>
+</svg>
