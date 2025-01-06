@@ -1,0 +1,198 @@
+name: Infrastructure CI
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'infrastructure/terraform/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'infrastructure/terraform/**'
+  workflow_dispatch:
+  workflow_call:
+
+env:
+  TERRAFORM_VERSION: '1.5.0'
+  AWS_REGION: 'us-west-2'
+  TFSEC_VERSION: 'v1.0.0'
+  SECURITY_SCAN_LEVEL: 'HIGH'
+
+jobs:
+  validate:
+    name: Validate Infrastructure
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_wrapper: false
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-session-name: TerraformCI
+
+      - name: Terraform Format Check
+        id: fmt
+        run: |
+          terraform fmt -check -recursive -diff
+          echo "format_status=$?" >> $GITHUB_OUTPUT
+
+      - name: Initialize Terraform
+        run: |
+          cd infrastructure/terraform/aws
+          terraform init -backend=false
+
+      - name: Terraform Validate
+        id: validate
+        run: |
+          cd infrastructure/terraform/aws
+          terraform validate
+          echo "validate_status=$?" >> $GITHUB_OUTPUT
+
+      - name: Run tfsec Security Scan
+        uses: aquasecurity/tfsec-action@v1.0.0
+        with:
+          soft_fail: false
+          format: sarif
+          additional_args: >-
+            --minimum-severity ${{ env.SECURITY_SCAN_LEVEL }}
+            --config-file infrastructure/terraform/.tfsec.yml
+          sarif_file: tfsec.sarif
+
+      - name: Upload SARIF file
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: tfsec.sarif
+          category: tfsec
+
+      - name: Run Checkov Security Scan
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: infrastructure/terraform
+          framework: terraform
+          output_format: sarif
+          output_file: checkov.sarif
+          soft_fail: false
+          skip_check: CKV_AWS_115,CKV_AWS_116
+          quiet: true
+
+      - name: Upload Checkov SARIF
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: checkov.sarif
+          category: checkov
+
+  test:
+    name: Test Infrastructure
+    needs: validate
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        environment: [development, staging, production]
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-session-name: TerraformTest
+
+      - name: Initialize Terraform
+        run: |
+          cd infrastructure/terraform/environments/${{ matrix.environment }}
+          terraform init -backend=false
+
+      - name: Run Terraform Plan
+        id: plan
+        run: |
+          cd infrastructure/terraform/environments/${{ matrix.environment }}
+          terraform plan -detailed-exitcode -no-color -out=tfplan
+          echo "plan_status=$?" >> $GITHUB_OUTPUT
+
+      - name: Run Compliance Checks
+        if: matrix.environment == 'production'
+        run: |
+          cd infrastructure/terraform/environments/production
+          terraform show -json tfplan | jq -r '.' > tfplan.json
+          checkov -f tfplan.json --framework terraform_plan --output sarif --output-file-path compliance.sarif
+
+      - name: Upload Compliance Results
+        if: matrix.environment == 'production'
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: infrastructure/terraform/environments/production/compliance.sarif
+          category: compliance
+
+  cost-estimate:
+    name: Infrastructure Cost Estimate
+    needs: validate
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Setup Infracost
+        uses: infracost/actions/setup@v2
+        with:
+          api-key: ${{ secrets.INFRACOST_API_KEY }}
+
+      - name: Generate Infracost Cost Estimate
+        run: |
+          cd infrastructure/terraform/environments/production
+          infracost breakdown --path . \
+            --format json \
+            --out-file infracost.json \
+            --terraform-var-file terraform.tfvars
+
+      - name: Post Infracost Comment
+        uses: infracost/actions/comment@v2
+        with:
+          path: infrastructure/terraform/environments/production/infracost.json
+          behavior: update
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+  notify:
+    name: Notification
+    needs: [validate, test, cost-estimate]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Send Slack Notification
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          channel-id: ${{ secrets.SLACK_CHANNEL_ID }}
+          slack-message: |
+            Infrastructure CI Status:
+            Validation: ${{ needs.validate.result }}
+            Testing: ${{ needs.test.result }}
+            Cost Estimate: ${{ needs.cost-estimate.result }}
+            Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
