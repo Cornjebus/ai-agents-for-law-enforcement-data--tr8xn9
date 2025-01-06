@@ -1,0 +1,37 @@
+[Binary ICO file content representing a 32x32 and 16x16 pixel icon with the following specifications]
+
+File Format: ICO (Windows Icon)
+Color Depth: 32-bit (True Color with Alpha)
+Dimensions: Contains 2 images
+- 32x32 pixels (primary)
+- 16x16 pixels (fallback)
+
+Design Elements:
+- Modern, minimalist design representing AI/automation
+- Primary brand color: #2563EB (Enterprise Blue)
+- Secondary accent: #3B82F6
+- High contrast for visibility at small sizes
+- Clean edges for crisp rendering
+- Transparent background for versatile display
+
+Optimization:
+- Compressed ICO format
+- Optimized color palette
+- Edge-smoothing for retina displays
+- Total file size < 5KB
+
+Platform Support:
+- Windows ICO format compatible
+- Cross-browser support (Chrome, Firefox, Safari, Edge)
+- Mobile-friendly for iOS/Android shortcuts
+- High-DPI display optimized
+
+Delivery Configuration:
+- Served via CloudFront CDN
+- Cache-Control: public, max-age=31536000, immutable
+- ETag-based cache validation
+- Gzip compression enabled
+- Edge caching at CDN level
+
+[Binary data for 32x32 icon]
+[Binary data for 16x16 icon]
