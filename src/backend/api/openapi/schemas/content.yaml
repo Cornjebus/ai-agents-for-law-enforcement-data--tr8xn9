@@ -1,0 +1,310 @@
+openapi: 3.0.3
+info:
+  title: Content Management API Schema
+  version: 1.0.0
+  description: OpenAPI schema definitions for content-related endpoints in the autonomous revenue generation platform
+
+components:
+  schemas:
+    Content:
+      type: object
+      required:
+        - id
+        - campaignId
+        - type
+        - platform
+        - content
+        - metadata
+        - status
+        - scheduledFor
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier for the content
+        campaignId:
+          type: string
+          format: uuid
+          description: Associated campaign identifier
+        type:
+          type: string
+          enum: [TEXT, IMAGE, AUDIO, DOCUMENT, VIDEO]
+          description: Type of content with format validation
+        platform:
+          type: string
+          enum: [LINKEDIN, TWITTER, TIKTOK, EMAIL, VOICE]
+          description: Distribution platform with specific requirements
+        content:
+          type: string
+          description: Actual content data
+          minLength: 1
+          maxLength: 50000
+        metadata:
+          $ref: '#/components/schemas/ContentMetadata'
+        metrics:
+          $ref: '#/components/schemas/ContentMetrics'
+        status:
+          type: string
+          enum: [DRAFT, PENDING_APPROVAL, APPROVED, SCHEDULED, PUBLISHED, ARCHIVED]
+          description: Current workflow status of the content
+        scheduledFor:
+          type: string
+          format: date-time
+          description: Scheduled publication time
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation timestamp
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last update timestamp
+
+    ContentMetadata:
+      type: object
+      required:
+        - title
+        - description
+        - keywords
+        - language
+        - targetAudience
+        - aiModel
+        - generationPrompt
+        - modelVersion
+        - generationParameters
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Content title
+        description:
+          type: string
+          minLength: 1
+          maxLength: 1000
+          description: Content description
+        keywords:
+          type: array
+          items:
+            type: string
+          minItems: 1
+          maxItems: 20
+          description: Content keywords for SEO and categorization
+        language:
+          type: string
+          pattern: '^[a-z]{2}-[A-Z]{2}$'
+          description: Content language code (e.g., en-US)
+        targetAudience:
+          type: array
+          items:
+            type: string
+          minItems: 1
+          description: Target audience segments
+        aiModel:
+          type: string
+          description: AI model used for content generation
+        generationPrompt:
+          type: string
+          minLength: 1
+          description: Prompt used for AI content generation
+        modelVersion:
+          type: string
+          description: Version of the AI model used
+        generationParameters:
+          type: object
+          description: AI model parameters used for generation
+          additionalProperties: true
+
+    ContentMetrics:
+      type: object
+      required:
+        - impressions
+        - engagements
+        - clicks
+        - conversions
+        - performance
+        - platformSpecificMetrics
+        - aiPerformanceMetrics
+      properties:
+        impressions:
+          type: integer
+          minimum: 0
+          description: Number of content impressions
+        engagements:
+          type: integer
+          minimum: 0
+          description: Number of user engagements
+        clicks:
+          type: integer
+          minimum: 0
+          description: Number of clicks or interactions
+        conversions:
+          type: integer
+          minimum: 0
+          description: Number of conversions generated
+        performance:
+          type: array
+          items:
+            $ref: '#/components/schemas/Metric'
+          description: Array of performance metrics
+        platformSpecificMetrics:
+          type: object
+          description: Platform-specific performance metrics
+          additionalProperties: true
+        aiPerformanceMetrics:
+          type: object
+          description: AI model performance metrics
+          additionalProperties:
+            type: number
+
+    Metric:
+      type: object
+      required:
+        - id
+        - name
+        - type
+        - value
+        - unit
+        - timestamp
+        - service
+        - environment
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the metric
+        name:
+          type: string
+          description: Human-readable metric name
+        type:
+          type: string
+          enum: [LATENCY, THROUGHPUT, ERROR_RATE, CONCURRENT_USERS, UPTIME, QUERY_TIME, 
+                VOICE_LATENCY, CONTENT_GENERATION_TIME, REVENUE, CONVERSION_RATE]
+        value:
+          type: number
+          description: Actual metric value
+        unit:
+          type: string
+          enum: [ms, req/s, q/s, %, uptime_%, count, USD, w/m]
+          description: Unit of measurement
+        timestamp:
+          type: string
+          format: date-time
+          description: When the metric was recorded
+        service:
+          type: string
+          description: Service generating the metric
+        environment:
+          type: string
+          enum: [production, staging, development]
+          description: Environment where metric was generated
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Additional contextual data
+        tags:
+          type: object
+          additionalProperties:
+            type: string
+          description: Searchable metric tags
+
+    PlatformContent:
+      type: object
+      required:
+        - platform
+        - content
+        - requirements
+      properties:
+        platform:
+          type: string
+          enum: [LINKEDIN, TWITTER, TIKTOK, EMAIL, VOICE]
+        content:
+          type: object
+          description: Platform-specific content structure
+          oneOf:
+            - $ref: '#/components/schemas/LinkedInContent'
+            - $ref: '#/components/schemas/TwitterContent'
+            - $ref: '#/components/schemas/TikTokContent'
+            - $ref: '#/components/schemas/EmailContent'
+            - $ref: '#/components/schemas/VoiceContent'
+        requirements:
+          type: object
+          description: Platform-specific content requirements
+          additionalProperties: true
+
+    LinkedInContent:
+      type: object
+      required:
+        - text
+        - mediaUrls
+      properties:
+        text:
+          type: string
+          maxLength: 3000
+        mediaUrls:
+          type: array
+          items:
+            type: string
+            format: uri
+          maxItems: 9
+
+    TwitterContent:
+      type: object
+      required:
+        - text
+      properties:
+        text:
+          type: string
+          maxLength: 280
+        mediaUrls:
+          type: array
+          items:
+            type: string
+            format: uri
+          maxItems: 4
+
+    TikTokContent:
+      type: object
+      required:
+        - videoUrl
+        - description
+      properties:
+        videoUrl:
+          type: string
+          format: uri
+        description:
+          type: string
+          maxLength: 2200
+
+    EmailContent:
+      type: object
+      required:
+        - subject
+        - body
+      properties:
+        subject:
+          type: string
+          maxLength: 200
+        body:
+          type: string
+        attachments:
+          type: array
+          items:
+            type: string
+            format: uri
+
+    VoiceContent:
+      type: object
+      required:
+        - script
+        - voiceId
+      properties:
+        script:
+          type: string
+        voiceId:
+          type: string
+        speechRate:
+          type: number
+          minimum: 0.5
+          maximum: 2.0
