@@ -1,0 +1,321 @@
+openapi: 3.1.0
+info:
+  title: Voice Service API
+  version: 1.0.0
+  description: Enhanced voice processing API with geographic routing and AI model integration
+
+servers:
+  - url: https://api.autonomousrevenue.com/v1
+    description: Production server with geographic routing
+
+components:
+  schemas:
+    Call:
+      type: object
+      description: Enhanced call data structure with performance metrics and AI model data
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique call identifier
+        campaignId:
+          type: string
+          format: uuid
+          description: Associated campaign identifier
+        leadId:
+          type: string
+          format: uuid
+          description: Associated lead identifier
+        status:
+          type: string
+          enum: [PENDING, CONNECTING, IN_PROGRESS, AI_PROCESSING, COMPLETED, FAILED, CANCELLED, ROUTING, TRANSCRIBING]
+          description: Current call status
+        startTime:
+          type: string
+          format: date-time
+          description: Call start timestamp
+        endTime:
+          type: string
+          format: date-time
+          nullable: true
+          description: Call end timestamp
+        duration:
+          type: number
+          description: Call duration in seconds
+        phoneNumber:
+          type: string
+          pattern: ^\+[1-9]\d{1,14}$
+          description: E.164 formatted phone number
+        region:
+          type: string
+          description: Geographic processing region
+        latency:
+          type: number
+          description: Voice processing latency in milliseconds
+        metrics:
+          type: object
+          properties:
+            voice_latency:
+              type: array
+              items:
+                $ref: '#/components/schemas/Metric'
+            processing_time:
+              type: array
+              items:
+                $ref: '#/components/schemas/Metric'
+        metadata:
+          type: object
+          properties:
+            aiModel:
+              type: string
+              description: AI model identifier
+            modelVersion:
+              type: string
+              description: AI model version
+            confidenceScore:
+              type: number
+              minimum: 0
+              maximum: 1
+              description: AI processing confidence score
+            geographicData:
+              $ref: '#/components/schemas/GeographicMetadata'
+      required:
+        - id
+        - campaignId
+        - leadId
+        - status
+        - phoneNumber
+        - region
+
+    GeographicMetadata:
+      type: object
+      description: Geographic routing and performance data
+      properties:
+        region:
+          type: string
+          description: Processing region
+        latency:
+          type: number
+          description: Regional latency in milliseconds
+        routingPath:
+          type: array
+          items:
+            type: string
+          description: Geographic routing path
+        nearestEdgeLocation:
+          type: string
+          description: Nearest edge location
+        routingOptimization:
+          type: boolean
+          description: Whether routing optimization is enabled
+
+    Metric:
+      type: object
+      description: Performance metric data structure
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          type: string
+          enum: [LATENCY, THROUGHPUT, ERROR_RATE, VOICE_LATENCY]
+        value:
+          type: number
+        unit:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        metadata:
+          type: object
+          additionalProperties: true
+
+    VoiceSynthesisRequest:
+      type: object
+      description: Voice synthesis request with quality parameters
+      properties:
+        text:
+          type: string
+          description: Text to synthesize
+          maxLength: 3000
+        voiceId:
+          type: string
+          description: Voice identifier
+        quality:
+          type: string
+          enum: [HIGH, MEDIUM, LOW]
+          default: HIGH
+          description: Voice quality level
+        region:
+          type: string
+          description: Preferred processing region
+        metadata:
+          type: object
+          properties:
+            modelConfig:
+              type: object
+              description: AI model configuration
+            optimizationLevel:
+              type: string
+              enum: [SPEED, QUALITY, BALANCED]
+            latencyRequirements:
+              type: object
+              properties:
+                maxLatency:
+                  type: number
+                  description: Maximum acceptable latency in milliseconds
+      required:
+        - text
+        - voiceId
+        - quality
+        - region
+
+paths:
+  /voice/calls:
+    get:
+      summary: List calls with regional filtering
+      operationId: listCalls
+      parameters:
+        - name: region
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [PENDING, CONNECTING, IN_PROGRESS, AI_PROCESSING, COMPLETED, FAILED, CANCELLED, ROUTING, TRANSCRIBING]
+        - name: campaignId
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Successfully retrieved calls
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Call'
+    
+    post:
+      summary: Create new call with regional optimization
+      operationId: createCall
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                phoneNumber:
+                  type: string
+                  pattern: ^\+[1-9]\d{1,14}$
+                campaignId:
+                  type: string
+                  format: uuid
+                leadId:
+                  type: string
+                  format: uuid
+                region:
+                  type: string
+                isEncrypted:
+                  type: boolean
+                  default: true
+              required:
+                - phoneNumber
+                - campaignId
+                - leadId
+                - region
+      responses:
+        '201':
+          description: Call created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Call'
+
+  /voice/synthesis:
+    post:
+      summary: Synthesize speech with quality parameters
+      operationId: synthesizeSpeech
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VoiceSynthesisRequest'
+      responses:
+        '200':
+          description: Speech synthesized successfully
+          content:
+            audio/mpeg:
+              schema:
+                type: string
+                format: binary
+
+  /voice/recognition:
+    post:
+      summary: Perform speech recognition with geographic routing
+      operationId: recognizeSpeech
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                audio:
+                  type: string
+                  format: binary
+                  description: Audio file to transcribe
+                language:
+                  type: string
+                  default: en-US
+                region:
+                  type: string
+                  description: Preferred processing region
+                minConfidence:
+                  type: number
+                  minimum: 0
+                  maximum: 1
+                  default: 0.85
+      responses:
+        '200':
+          description: Speech recognized successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  text:
+                    type: string
+                  confidence:
+                    type: number
+                  processingTime:
+                    type: number
+                  region:
+                    type: string
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+security:
+  - BearerAuth: []
+  - ApiKeyAuth: []
+
+tags:
+  - name: voice
+    description: Voice processing operations with geographic routing
