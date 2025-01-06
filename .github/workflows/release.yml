@@ -1,0 +1,194 @@
+name: Release Pipeline
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  NODE_VERSION: '18.x'
+  PNPM_VERSION: '8.x'
+  AWS_REGION: 'us-west-2'
+  TERRAFORM_VERSION: '1.5.0'
+  CANARY_INITIAL_WEIGHT: '10'
+  CANARY_INCREMENT: '20'
+  ERROR_THRESHOLD: '1'
+  DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
+
+jobs:
+  prepare:
+    name: Prepare Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      changelog: ${{ steps.changelog.outputs.changelog }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3.5.3
+        with:
+          fetch-depth: 0
+
+      - name: Validate semantic version
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          if ! [[ $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid version format. Must be vX.Y.Z"
+            exit 1
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^)
+          CHANGELOG=$(git log --pretty=format:"- %s" $PREVIOUS_TAG..HEAD)
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ steps.version.outputs.version }}
+          body: ${{ steps.changelog.outputs.changelog }}
+          draft: false
+          prerelease: false
+
+  validate:
+    name: Validate Infrastructure
+    needs: prepare
+    uses: ./.github/workflows/infrastructure-ci.yml
+
+  staging:
+    name: Deploy to Staging
+    needs: [prepare, validate]
+    runs-on: ubuntu-latest
+    environment: staging
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3.5.3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2.2.0
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-session-name: StagingDeploy
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2.0.3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Deploy infrastructure
+        working-directory: infrastructure/terraform/environments/staging
+        run: |
+          terraform init
+          terraform plan -out=tfplan
+          terraform apply -auto-approve tfplan
+
+      - name: Deploy services
+        run: |
+          aws ecs update-service --cluster staging-cluster --service api-service --force-new-deployment
+          aws ecs wait services-stable --cluster staging-cluster --services api-service
+
+      - name: Run integration tests
+        uses: ./.github/workflows/backend-ci.yml
+        with:
+          environment: staging
+
+  production:
+    name: Deploy to Production
+    needs: [staging]
+    runs-on: ubuntu-latest
+    environment: production
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3.5.3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2.2.0
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-session-name: ProductionDeploy
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2.0.3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Deploy infrastructure
+        working-directory: infrastructure/terraform/environments/production
+        run: |
+          terraform init
+          terraform plan -out=tfplan
+          terraform apply -auto-approve tfplan
+
+      - name: Initialize canary deployment
+        id: canary
+        run: |
+          aws ecs update-service \
+            --cluster production-cluster \
+            --service api-service \
+            --task-definition api-service:${GITHUB_SHA} \
+            --desired-count 1 \
+            --deployment-configuration "deploymentCircuitBreaker={enable=true,rollback=true},maximumPercent=200,minimumHealthyPercent=100"
+
+      - name: Setup Datadog monitoring
+        uses: datadog/action-datadog-monitor@v1.2.0
+        with:
+          api-key: ${{ secrets.DATADOG_API_KEY }}
+          monitor-tags: "deployment:canary,version:${{ needs.prepare.outputs.version }}"
+
+      - name: Gradual traffic shift
+        run: |
+          WEIGHT=${{ env.CANARY_INITIAL_WEIGHT }}
+          while [ $WEIGHT -lt 100 ]; do
+            ERROR_RATE=$(curl -s ${DATADOG_API_ENDPOINT}/error-rate)
+            if [ $(echo "$ERROR_RATE > ${{ env.ERROR_THRESHOLD }}" | bc -l) -eq 1 ]; then
+              echo "Error rate threshold exceeded. Rolling back."
+              aws ecs update-service --cluster production-cluster --service api-service --task-definition api-service:PREVIOUS
+              exit 1
+            fi
+            aws ecs update-service --cluster production-cluster --service api-service --desired-count $((WEIGHT * TOTAL_TASKS / 100))
+            WEIGHT=$((WEIGHT + ${{ env.CANARY_INCREMENT }}))
+            sleep 300
+          done
+
+      - name: Finalize deployment
+        if: success()
+        run: |
+          aws ecs update-service \
+            --cluster production-cluster \
+            --service api-service \
+            --desired-count ${{ env.PRODUCTION_TASK_COUNT }}
+
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          aws ecs update-service \
+            --cluster production-cluster \
+            --service api-service \
+            --task-definition api-service:PREVIOUS \
+            --force-new-deployment
+
+      - name: Notify deployment status
+        if: always()
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          channel-id: ${{ secrets.SLACK_CHANNEL_ID }}
+          slack-message: |
+            Deployment Status: ${{ job.status }}
+            Version: ${{ needs.prepare.outputs.version }}
+            Environment: Production
+            ${{ job.status == 'success' && 'Deployment completed successfully! 🚀' || 'Deployment failed! 🔥' }}
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
