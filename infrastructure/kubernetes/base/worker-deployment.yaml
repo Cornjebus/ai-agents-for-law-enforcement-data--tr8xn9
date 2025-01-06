@@ -1,0 +1,137 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: revenue-platform-worker
+  namespace: revenue-platform
+  labels:
+    app: revenue-platform
+    component: worker
+    managed-by: kustomize
+    app.kubernetes.io/name: revenue-platform-worker
+    app.kubernetes.io/part-of: autonomous-revenue-platform
+    app.kubernetes.io/component: worker
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9090"
+    prometheus.io/path: "/metrics"
+    description: "Background worker deployment for AI processing and campaign optimization"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: revenue-platform
+      component: worker
+  template:
+    metadata:
+      labels:
+        app: revenue-platform
+        component: worker
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: worker
+        image: worker
+        imagePullPolicy: IfNotPresent
+        resources:
+          requests:
+            cpu: "1"
+            memory: "2Gi"
+          limits:
+            cpu: "2" 
+            memory: "4Gi"
+        env:
+          - name: NODE_ENV
+            valueFrom:
+              configMapKeyRef:
+                name: revenue-platform-config
+                key: NODE_ENV
+          - name: DATABASE_URL
+            valueFrom:
+              secretKeyRef:
+                name: revenue-platform-secrets
+                key: DATABASE_URL
+          - name: REDIS_URL
+            valueFrom:
+              secretKeyRef:
+                name: revenue-platform-secrets
+                key: REDIS_URL
+          - name: KAFKA_BROKERS
+            valueFrom:
+              secretKeyRef:
+                name: revenue-platform-secrets
+                key: KAFKA_BROKERS
+          - name: OPENAI_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: revenue-platform-secrets
+                key: OPENAI_API_KEY
+          - name: AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: revenue-platform-secrets
+                key: AWS_ACCESS_KEY_ID
+          - name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: revenue-platform-secrets
+                key: AWS_SECRET_ACCESS_KEY
+        volumeMounts:
+          - name: node-modules
+            mountPath: /app/node_modules
+          - name: app
+            mountPath: /app
+          - name: tmp
+            mountPath: /tmp
+        livenessProbe:
+          exec:
+            command: ["node", "healthcheck.js"]
+          initialDelaySeconds: 40
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command: ["node", "healthcheck.js"]
+          initialDelaySeconds: 20
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 2
+        securityContext:
+          runAsUser: 1000
+          runAsGroup: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+              - ALL
+      volumes:
+        - name: node-modules
+          emptyDir: {}
+        - name: app
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+      securityContext:
+        fsGroup: 1000
+        runAsNonRoot: true
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: component
+                  operator: In
+                  values:
+                  - worker
+              topologyKey: kubernetes.io/hostname
+      terminationGracePeriodSeconds: 60
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
